@@ -1,0 +1,126 @@
+use bevy::prelude::*;
+
+const ARENA_WIDTH: u32 = 10;
+const ARENA_HEIGHT: u32 = 20;
+
+// region: Resources
+struct Materials {
+  gray_block: Handle<ColorMaterial>,
+}
+struct MainWindow {
+  w: u32,
+  h: u32,
+}
+impl Default for MainWindow {
+  fn default() -> Self {
+    Self { w: 400, h: 800 }
+  }
+}
+// endregion: Resource
+
+// region: Component
+struct Block;
+struct Position {
+  x: i32,
+  y: i32,
+}
+struct Size {
+  width: f32,
+  height: f32,
+}
+impl Size {
+  pub fn square(x: f32) -> Self {
+    Self {
+      width: x,
+      height: x,
+    }
+  }
+}
+// endregion: Component
+
+fn main() {
+  App::build()
+    .insert_resource(WindowDescriptor {
+      title: "Tetris".to_string(),
+      width: 400.0,
+      height: 800.0,
+      ..Default::default()
+    }) // Windowの設定
+    .insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
+    .insert_resource(MainWindow::default())
+    .add_startup_system(setup.system())
+    .add_startup_stage("game_setup", SystemStage::single(spawn_block.system()))
+    .add_system(block_movement.system())
+    .add_system_set_to_stage(
+      CoreStage::PostUpdate,
+      SystemSet::new()
+        .with_system(position_translation.system())
+        .with_system(size_scaling.system()),
+    )
+    .add_plugins(DefaultPlugins)
+    .run();
+}
+
+fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
+  commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+  commands.insert_resource(Materials {
+    gray_block: materials.add(Color::rgb(0.7, 0.7, 0.7).into()),
+  });
+}
+
+fn spawn_block(mut commands: Commands, materials: Res<Materials>) {
+  commands
+    .spawn_bundle(SpriteBundle {
+      material: materials.gray_block.clone(),
+      sprite: Sprite::new(Vec2::new(10.0, 10.0)),
+      ..Default::default()
+    })
+    .insert(Block)
+    .insert(Position { x: 3, y: 3 })
+    .insert(Size::square(0.8));
+}
+
+fn block_movement(
+  keyboard_input: Res<Input<KeyCode>>,
+  mut block_positions: Query<&mut Position, With<Block>>,
+) {
+  for mut pos in block_positions.iter_mut() {
+    if keyboard_input.just_pressed(KeyCode::Left) && pos.x > 0 {
+      pos.x -= 1;
+    }
+    if keyboard_input.just_pressed(KeyCode::Right) && pos.x < (ARENA_WIDTH - 1) as i32 {
+      pos.x += 1;
+    }
+    // 急降下
+    if keyboard_input.pressed(KeyCode::Down) && pos.y > 0 {
+      pos.y -= 1;
+    }
+    if keyboard_input.just_pressed(KeyCode::Up) && pos.y < (ARENA_HEIGHT - 1) as i32 {
+      pos.y += 1;
+    }
+  }
+}
+
+fn size_scaling(window: Res<MainWindow>, mut q: Query<(&Size, &mut Sprite)>) {
+  for (sprite_size, mut sprite) in q.iter_mut() {
+    sprite.size = Vec2::new(
+      sprite_size.width / ARENA_WIDTH as f32 * window.w as f32,
+      sprite_size.height / ARENA_HEIGHT as f32 * window.h as f32,
+    );
+  }
+}
+
+fn position_translation(windows: Res<Windows>, mut q: Query<(&Position, &mut Transform)>) {
+  fn convert(pos: f32, bound_window: f32, bound_game: f32) -> f32 {
+    let tile_size = bound_window / bound_game;
+    pos / bound_game * bound_window - (bound_window / 2.) + (tile_size / 2.)
+  }
+  let window = windows.get_primary().unwrap();
+  for (pos, mut transform) in q.iter_mut() {
+    transform.translation = Vec3::new(
+      convert(pos.x as f32, window.width() as f32, ARENA_WIDTH as f32),
+      convert(pos.y as f32, window.height() as f32, ARENA_HEIGHT as f32),
+      0.0,
+    );
+  }
+}
