@@ -1,3 +1,4 @@
+use bevy::core::FixedTimestep;
 use bevy::prelude::*;
 
 const ARENA_WIDTH: u32 = 10;
@@ -19,7 +20,10 @@ impl Default for MainWindow {
 // endregion: Resource
 
 // region: Component
-struct Block;
+struct Block {
+  direction: Direction,
+}
+struct ActiveBlock(bool);
 struct Position {
   x: i32,
   y: i32,
@@ -36,7 +40,20 @@ impl Size {
     }
   }
 }
+#[derive(PartialEq, Copy, Clone)]
+enum Direction {
+  Left,
+  Up,
+  Right,
+  Down,
+}
 // endregion: Component
+
+#[derive(SystemLabel, Debug, Hash, PartialEq, Eq, Clone)]
+enum Label {
+  Input,
+  Movement,
+}
 
 fn main() {
   App::build()
@@ -50,6 +67,19 @@ fn main() {
     .insert_resource(MainWindow::default())
     .add_startup_system(setup.system())
     .add_startup_stage("game_setup", SystemStage::single(spawn_block.system()))
+    .add_system(
+      block_movement_input
+        .system()
+        .label(Label::Input)
+        .before(Label::Movement),
+    )
+    .add_system_set(
+      SystemSet::new()
+        .with_run_criteria(FixedTimestep::step(0.5))
+        .with_system(block_movement // 自由落下システムを追加する
+        .system()
+        .label(Label::Movement))
+    )
     .add_system(block_movement.system())
     .add_system_set_to_stage(
       CoreStage::PostUpdate,
@@ -75,9 +105,34 @@ fn spawn_block(mut commands: Commands, materials: Res<Materials>) {
       sprite: Sprite::new(Vec2::new(10.0, 10.0)),
       ..Default::default()
     })
-    .insert(Block)
+    .insert(Block {
+      direction: Direction::Down,
+    })
     .insert(Position { x: 3, y: 3 })
-    .insert(Size::square(0.8));
+    .insert(Size::square(0.8))
+    .insert(ActiveBlock(true));
+}
+
+fn block_movement_input(
+  keyboard_input: Res<Input<KeyCode>>,
+  mut query: Query<(&ActiveBlock, &mut Block)>,
+) {
+  for (active_block, mut block) in query.single_mut() {
+    if active_block.0 {
+      let dir: Direction = if keyboard_input.just_pressed(KeyCode::Left) {
+        Direction::Left
+      } else if keyboard_input.just_pressed(KeyCode::Right) {
+        Direction::Right
+      } else if keyboard_input.pressed(KeyCode::Down) {
+        Direction::Down
+      } else if keyboard_input.just_pressed(KeyCode::Up) {
+        Direction::Up
+      } else {
+        block.direction
+      };
+      block.direction = dir;
+    }
+  }
 }
 
 fn block_movement(
