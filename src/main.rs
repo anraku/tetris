@@ -76,9 +76,12 @@ fn main() {
     .add_system_set(
       SystemSet::new()
         .with_run_criteria(FixedTimestep::step(0.5))
-        .with_system(block_movement // 自由落下システムを追加する
-        .system()
-        .label(Label::Movement))
+        .with_system(
+          block_free_fall // 自由落下システムを追加する
+            .system()
+            .label(Label::Movement),
+        )
+        .with_system(block_movement.system().label(Label::Movement)),
     )
     .add_system(block_movement.system())
     .add_system_set_to_stage(
@@ -131,6 +134,14 @@ fn block_movement_input(
         block.direction
       };
       block.direction = dir;
+    }
+  }
+}
+
+fn block_free_fall(mut query: Query<(&ActiveBlock, &mut Position), With<Block>>) {
+  for (active_block, mut position) in query.iter_mut() {
+    if active_block.0 {
+      position.y -= 1
     }
   }
 }
