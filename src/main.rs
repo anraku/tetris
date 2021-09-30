@@ -49,10 +49,14 @@ enum Direction {
 }
 // endregion: Component
 
+// region: Event
+struct RespawnEvent;
+
 #[derive(SystemLabel, Debug, Hash, PartialEq, Eq, Clone)]
 enum Label {
   Input,
   Movement,
+  Stack,
 }
 
 fn main() {
@@ -65,6 +69,7 @@ fn main() {
     }) // Windowの設定
     .insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
     .insert_resource(MainWindow::default())
+    .add_event::<RespawnEvent>()
     .add_startup_system(setup.system())
     .add_startup_stage("game_setup", SystemStage::single(spawn_block.system()))
     .add_system(
@@ -81,7 +86,19 @@ fn main() {
             .system()
             .label(Label::Movement),
         )
-        .with_system(block_movement.system().label(Label::Movement)),
+        .with_system(
+          block_movement
+            .system()
+            .label(Label::Movement)
+            .after(Label::Input),
+        )
+        .with_system(
+          stack_block
+            .system()
+            .label(Label::Stack)
+            .after(Label::Movement),
+        )
+        .with_system(respawn_block.system().after(Label::Stack)),
     )
     .add_system(block_movement.system())
     .add_system_set_to_stage(
@@ -114,6 +131,16 @@ fn spawn_block(mut commands: Commands, materials: Res<Materials>) {
     .insert(Position { x: 3, y: 3 })
     .insert(Size::square(0.8))
     .insert(ActiveBlock(true));
+}
+
+fn respawn_block(
+  mut commands: Commands,
+  mut materials: Res<Materials>,
+  mut reader: EventReader<RespawnEvent>,
+) {
+  if reader.iter().next().is_some() {
+    spawn_block(commands, materials);
+  }
 }
 
 fn block_movement_input(
@@ -188,5 +215,17 @@ fn position_translation(windows: Res<Windows>, mut q: Query<(&Position, &mut Tra
       convert(pos.y as f32, window.height() as f32, ARENA_HEIGHT as f32),
       0.0,
     );
+  }
+}
+
+fn stack_block(
+  mut writer: EventWriter<RespawnEvent>,
+  mut query: Query<(&mut ActiveBlock, &Position), With<Block>>,
+) {
+  for (mut active_block, position) in query.iter_mut() {
+    if active_block.0 && position.y == 0 {
+      active_block.0 = false;
+      writer.send(RespawnEvent);
+    }
   }
 }
