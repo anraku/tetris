@@ -132,7 +132,7 @@ fn spawn_block(mut commands: Commands, materials: Res<Materials>) {
     .insert(ActiveBlock {
       direction: Direction::Down,
     })
-    .insert(Position { x: 3, y: 8 })
+    .insert(Position { x: 3, y: 20 })
     .insert(Size::square(0.8));
 }
 
@@ -147,7 +147,7 @@ fn respawn_block(
 }
 
 fn block_movement_input(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut ActiveBlock>) {
-  for mut block in query.single_mut() {
+  if let Ok(mut block) = query.single_mut() {
     let dir: Direction = if keyboard_input.just_pressed(KeyCode::Left) {
       Direction::Left
     } else if keyboard_input.just_pressed(KeyCode::Right) {
@@ -164,16 +164,16 @@ fn block_movement_input(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&m
 }
 
 fn block_free_fall(mut query: Query<&mut Position, With<ActiveBlock>>) {
-  for mut position in query.iter_mut() {
+  if let Ok(mut position) = query.single_mut() {
     position.y -= 1
   }
 }
 
 fn block_movement(
   keyboard_input: Res<Input<KeyCode>>,
-  mut block_positions: Query<&mut Position, With<ActiveBlock>>,
+  mut block_position: Query<&mut Position, With<ActiveBlock>>,
 ) {
-  for mut pos in block_positions.iter_mut() {
+  if let Ok(mut pos) = block_position.single_mut() {
     if keyboard_input.just_pressed(KeyCode::Left) && pos.x > 0 {
       pos.x -= 1;
     }
@@ -218,10 +218,10 @@ fn stack_block(
   mut commands: Commands,
   materials: Res<Materials>,
   mut writer: EventWriter<RespawnEvent>,
-  mut active_block_query: Query<(Entity, &Position), With<ActiveBlock>>,
+  active_block_query: Query<(Entity, &Position), With<ActiveBlock>>,
   stacked_block_query: Query<&Position, With<StackedBlock>>,
 ) {
-  if let Ok((entity, active_block_position)) = active_block_query.single_mut() {
+  if let Ok((entity, active_block_position)) = active_block_query.single() {
     let mut stack = |x: i32, y: i32| {
       // despawn active block
       commands.entity(entity).despawn();
@@ -240,13 +240,15 @@ fn stack_block(
 
     if active_block_position.y <= 0 {
       stack(active_block_position.x, max(active_block_position.y, 0));
+      return;
     }
 
     for stacked_block_position in stacked_block_query.iter() {
-      if active_block_position.y - 1 <= stacked_block_position.y
+      if active_block_position.y - 1 == stacked_block_position.y
         && active_block_position.x == stacked_block_position.x
       {
         stack(stacked_block_position.x, stacked_block_position.y + 1);
+        break;
       }
     }
   }
