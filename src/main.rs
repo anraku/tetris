@@ -155,12 +155,9 @@ fn block_movement_input(
 ) {
   if let Ok((active_block_position, mut active_block)) = active_block_query.single_mut() {
     let is_collision = |active_block_position: &Position| -> bool {
-      for stacked_block_position in stacked_block_query.iter() {
-        if active_block_position == stacked_block_position {
-          return true;
-        }
-      }
-      false
+      stacked_block_query
+        .iter()
+        .any(|pos| pos == active_block_position)
     };
 
     let dir: Direction = if keyboard_input.just_pressed(KeyCode::Left) {
