@@ -1,3 +1,5 @@
+use std::cmp::max;
+
 use bevy::core::FixedTimestep;
 use bevy::prelude::*;
 
@@ -131,7 +133,7 @@ fn spawn_block(mut commands: Commands, materials: Res<Materials>) {
     .insert(Block {
       direction: Direction::Down,
     })
-    .insert(Position { x: 3, y: 3 })
+    .insert(Position { x: 3, y: 8 })
     .insert(Size::square(0.8))
     .insert(ActiveBlock(true));
 }
@@ -225,10 +227,11 @@ fn stack_block(
   mut commands: Commands,
   materials: Res<Materials>,
   mut writer: EventWriter<RespawnEvent>,
-  mut query: Query<(Entity, &mut ActiveBlock, &Position), With<Block>>,
+  mut active_block_query: Query<(Entity, &mut ActiveBlock, &Position), With<Block>>,
+  stacked_block_query: Query<&Position, With<StackedBlock>>,
 ) {
-  for (entity, mut active_block, position) in query.iter_mut() {
-    if active_block.0 && position.y == 0 {
+  if let Ok((entity, mut active_block, active_block_position)) = active_block_query.single_mut() {
+    let mut stack = |x: i32, y: i32| {
       // TODO delete after
       active_block.0 = false;
 
@@ -242,12 +245,21 @@ fn stack_block(
           ..Default::default()
         })
         .insert(StackedBlock)
-        .insert(Position {
-          x: position.x,
-          y: position.y,
-        })
+        .insert(Position { x, y })
         .insert(Size::square(0.8));
       writer.send(RespawnEvent);
+    };
+
+    if active_block_position.y <= 0 {
+      stack(active_block_position.x, max(active_block_position.y, 0));
+    }
+
+    for stacked_block_position in stacked_block_query.iter() {
+      if active_block_position.y - 1 <= stacked_block_position.y
+        && active_block_position.x == stacked_block_position.x
+      {
+        stack(stacked_block_position.x, stacked_block_position.y + 1);
+      }
     }
   }
 }
