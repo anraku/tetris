@@ -7,6 +7,7 @@ const ARENA_HEIGHT: u32 = 20;
 // region: Resources
 struct Materials {
   gray_block: Handle<ColorMaterial>,
+  white_block: Handle<ColorMaterial>,
 }
 struct MainWindow {
   w: u32,
@@ -23,6 +24,7 @@ impl Default for MainWindow {
 struct Block {
   direction: Direction,
 }
+struct StackedBlock;
 struct ActiveBlock(bool);
 struct Position {
   x: i32,
@@ -115,6 +117,7 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
   commands.spawn_bundle(OrthographicCameraBundle::new_2d());
   commands.insert_resource(Materials {
     gray_block: materials.add(Color::rgb(0.7, 0.7, 0.7).into()),
+    white_block: materials.add(Color::rgb(0.1, 0.1, 0.1).into()),
   });
 }
 
@@ -219,12 +222,31 @@ fn position_translation(windows: Res<Windows>, mut q: Query<(&Position, &mut Tra
 }
 
 fn stack_block(
+  mut commands: Commands,
+  materials: Res<Materials>,
   mut writer: EventWriter<RespawnEvent>,
-  mut query: Query<(&mut ActiveBlock, &Position), With<Block>>,
+  mut query: Query<(Entity, &mut ActiveBlock, &Position), With<Block>>,
 ) {
-  for (mut active_block, position) in query.iter_mut() {
+  for (entity, mut active_block, position) in query.iter_mut() {
     if active_block.0 && position.y == 0 {
+      // TODO delete after
       active_block.0 = false;
+
+      // despawn active block
+      commands.entity(entity).despawn();
+
+      // spawn stacked block
+      commands
+        .spawn_bundle(SpriteBundle {
+          material: materials.white_block.clone(),
+          ..Default::default()
+        })
+        .insert(StackedBlock)
+        .insert(Position {
+          x: position.x,
+          y: position.y,
+        })
+        .insert(Size::square(0.8));
       writer.send(RespawnEvent);
     }
   }
