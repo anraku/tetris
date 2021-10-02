@@ -45,6 +45,7 @@ impl Size {
 }
 #[derive(PartialEq, Copy, Clone)]
 enum Direction {
+  Neutral,
   Left,
   Up,
   Right,
@@ -130,7 +131,7 @@ fn spawn_block(mut commands: Commands, materials: Res<Materials>) {
       ..Default::default()
     })
     .insert(ActiveBlock {
-      direction: Direction::Down,
+      direction: Direction::Neutral,
     })
     .insert(Position { x: 3, y: 20 })
     .insert(Size::square(0.8));
@@ -157,7 +158,7 @@ fn block_movement_input(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&m
     } else if keyboard_input.just_pressed(KeyCode::Up) {
       Direction::Up
     } else {
-      block.direction
+      Direction::Neutral
     };
     block.direction = dir;
   }
@@ -169,22 +170,16 @@ fn block_free_fall(mut query: Query<&mut Position, With<ActiveBlock>>) {
   }
 }
 
-fn block_movement(
-  keyboard_input: Res<Input<KeyCode>>,
-  mut block_position: Query<&mut Position, With<ActiveBlock>>,
-) {
-  if let Ok(mut pos) = block_position.single_mut() {
-    if keyboard_input.just_pressed(KeyCode::Left) && pos.x > 0 {
+fn block_movement(mut active_block_position: Query<(&mut Position, &ActiveBlock)>) {
+  if let Ok((mut pos, active_block)) = active_block_position.single_mut() {
+    if active_block.direction == Direction::Left && pos.x > 0 {
       pos.x -= 1;
-    }
-    if keyboard_input.just_pressed(KeyCode::Right) && pos.x < (ARENA_WIDTH - 1) as i32 {
+    } else if active_block.direction == Direction::Right && pos.x < (ARENA_WIDTH - 1) as i32 {
       pos.x += 1;
-    }
-    // 急降下
-    if keyboard_input.pressed(KeyCode::Down) && pos.y > 0 {
+    } else if active_block.direction == Direction::Down && pos.y > 0 {
+      // 急降下
       pos.y -= 1;
-    }
-    if keyboard_input.just_pressed(KeyCode::Up) && pos.y < (ARENA_HEIGHT - 1) as i32 {
+    } else if active_block.direction == Direction::Up && pos.y < (ARENA_HEIGHT - 1) as i32 {
       pos.y += 1;
     }
   }
