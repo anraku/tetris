@@ -23,11 +23,10 @@ impl Default for MainWindow {
 // endregion: Resource
 
 // region: Component
-struct Block {
+struct ActiveBlock {
   direction: Direction,
 }
 struct StackedBlock;
-struct ActiveBlock(bool);
 struct Position {
   x: i32,
   y: i32,
@@ -130,17 +129,16 @@ fn spawn_block(mut commands: Commands, materials: Res<Materials>) {
       sprite: Sprite::new(Vec2::new(10.0, 10.0)),
       ..Default::default()
     })
-    .insert(Block {
+    .insert(ActiveBlock {
       direction: Direction::Down,
     })
     .insert(Position { x: 3, y: 8 })
-    .insert(Size::square(0.8))
-    .insert(ActiveBlock(true));
+    .insert(Size::square(0.8));
 }
 
 fn respawn_block(
-  mut commands: Commands,
-  mut materials: Res<Materials>,
+  commands: Commands,
+  materials: Res<Materials>,
   mut reader: EventReader<RespawnEvent>,
 ) {
   if reader.iter().next().is_some() {
@@ -148,39 +146,32 @@ fn respawn_block(
   }
 }
 
-fn block_movement_input(
-  keyboard_input: Res<Input<KeyCode>>,
-  mut query: Query<(&ActiveBlock, &mut Block)>,
-) {
-  for (active_block, mut block) in query.single_mut() {
-    if active_block.0 {
-      let dir: Direction = if keyboard_input.just_pressed(KeyCode::Left) {
-        Direction::Left
-      } else if keyboard_input.just_pressed(KeyCode::Right) {
-        Direction::Right
-      } else if keyboard_input.pressed(KeyCode::Down) {
-        Direction::Down
-      } else if keyboard_input.just_pressed(KeyCode::Up) {
-        Direction::Up
-      } else {
-        block.direction
-      };
-      block.direction = dir;
-    }
+fn block_movement_input(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut ActiveBlock>) {
+  for mut block in query.single_mut() {
+    let dir: Direction = if keyboard_input.just_pressed(KeyCode::Left) {
+      Direction::Left
+    } else if keyboard_input.just_pressed(KeyCode::Right) {
+      Direction::Right
+    } else if keyboard_input.pressed(KeyCode::Down) {
+      Direction::Down
+    } else if keyboard_input.just_pressed(KeyCode::Up) {
+      Direction::Up
+    } else {
+      block.direction
+    };
+    block.direction = dir;
   }
 }
 
-fn block_free_fall(mut query: Query<(&ActiveBlock, &mut Position), With<Block>>) {
-  for (active_block, mut position) in query.iter_mut() {
-    if active_block.0 {
-      position.y -= 1
-    }
+fn block_free_fall(mut query: Query<&mut Position, With<ActiveBlock>>) {
+  for mut position in query.iter_mut() {
+    position.y -= 1
   }
 }
 
 fn block_movement(
   keyboard_input: Res<Input<KeyCode>>,
-  mut block_positions: Query<&mut Position, With<Block>>,
+  mut block_positions: Query<&mut Position, With<ActiveBlock>>,
 ) {
   for mut pos in block_positions.iter_mut() {
     if keyboard_input.just_pressed(KeyCode::Left) && pos.x > 0 {
@@ -227,14 +218,11 @@ fn stack_block(
   mut commands: Commands,
   materials: Res<Materials>,
   mut writer: EventWriter<RespawnEvent>,
-  mut active_block_query: Query<(Entity, &mut ActiveBlock, &Position), With<Block>>,
+  mut active_block_query: Query<(Entity, &Position), With<ActiveBlock>>,
   stacked_block_query: Query<&Position, With<StackedBlock>>,
 ) {
-  if let Ok((entity, mut active_block, active_block_position)) = active_block_query.single_mut() {
+  if let Ok((entity, active_block_position)) = active_block_query.single_mut() {
     let mut stack = |x: i32, y: i32| {
-      // TODO delete after
-      active_block.0 = false;
-
       // despawn active block
       commands.entity(entity).despawn();
 
