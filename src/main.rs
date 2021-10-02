@@ -27,6 +27,7 @@ struct ActiveBlock {
   direction: Direction,
 }
 struct StackedBlock;
+#[derive(PartialEq)]
 struct Position {
   x: i32,
   y: i32,
@@ -147,20 +148,57 @@ fn respawn_block(
   }
 }
 
-fn block_movement_input(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut ActiveBlock>) {
-  if let Ok(mut block) = query.single_mut() {
+fn block_movement_input(
+  keyboard_input: Res<Input<KeyCode>>,
+  mut active_block_query: Query<(&Position, &mut ActiveBlock)>,
+  stacked_block_query: Query<&Position, With<StackedBlock>>,
+) {
+  if let Ok((active_block_position, mut active_block)) = active_block_query.single_mut() {
+    let is_collision = |active_block_position: &Position| -> bool {
+      for stacked_block_position in stacked_block_query.iter() {
+        if active_block_position == stacked_block_position {
+          return true;
+        }
+      }
+      false
+    };
+
     let dir: Direction = if keyboard_input.just_pressed(KeyCode::Left) {
-      Direction::Left
+      let pos = Position {
+        x: active_block_position.x - 1,
+        y: active_block_position.y,
+      };
+      if !is_collision(&pos) {
+        Direction::Left
+      } else {
+        Direction::Neutral
+      }
     } else if keyboard_input.just_pressed(KeyCode::Right) {
-      Direction::Right
+      let pos = Position {
+        x: active_block_position.x + 1,
+        y: active_block_position.y,
+      };
+      if !is_collision(&pos) {
+        Direction::Right
+      } else {
+        Direction::Neutral
+      }
     } else if keyboard_input.pressed(KeyCode::Down) {
-      Direction::Down
+      let pos = Position {
+        x: active_block_position.x,
+        y: active_block_position.y - 1,
+      };
+      if !is_collision(&pos) {
+        Direction::Down
+      } else {
+        Direction::Neutral
+      }
     } else if keyboard_input.just_pressed(KeyCode::Up) {
       Direction::Up
     } else {
       Direction::Neutral
     };
-    block.direction = dir;
+    active_block.direction = dir;
   }
 }
 
