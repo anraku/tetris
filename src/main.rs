@@ -32,6 +32,16 @@ struct Position {
   x: i32,
   y: i32,
 }
+impl PartialEq<&Position> for Mut<'_, Position> {
+  fn eq(&self, other: &&Position) -> bool {
+    self.x.eq(&other.x) && self.y.eq(&other.y)
+  }
+}
+impl PartialEq<Mut<'_, Position>> for &Position {
+  fn eq(&self, other: &Mut<Position>) -> bool {
+    self.x.eq(&other.x) && self.y.eq(&other.y)
+  }
+}
 struct Size {
   width: f32,
   height: f32,
@@ -150,46 +160,15 @@ fn respawn_block(
 
 fn block_movement_input(
   keyboard_input: Res<Input<KeyCode>>,
-  mut active_block_query: Query<(&Position, &mut ActiveBlock)>,
-  stacked_block_query: Query<&Position, With<StackedBlock>>,
+  mut active_block_query: Query<&mut ActiveBlock>,
 ) {
-  if let Ok((active_block_position, mut active_block)) = active_block_query.single_mut() {
-    let is_collision = |active_block_position: &Position| -> bool {
-      stacked_block_query
-        .iter()
-        .any(|pos| pos == active_block_position)
-    };
-
+  if let Ok(mut active_block) = active_block_query.single_mut() {
     let dir: Direction = if keyboard_input.just_pressed(KeyCode::Left) {
-      let pos = Position {
-        x: active_block_position.x - 1,
-        y: active_block_position.y,
-      };
-      if !is_collision(&pos) {
-        Direction::Left
-      } else {
-        Direction::Neutral
-      }
+      Direction::Left
     } else if keyboard_input.just_pressed(KeyCode::Right) {
-      let pos = Position {
-        x: active_block_position.x + 1,
-        y: active_block_position.y,
-      };
-      if !is_collision(&pos) {
-        Direction::Right
-      } else {
-        Direction::Neutral
-      }
+      Direction::Right
     } else if keyboard_input.pressed(KeyCode::Down) {
-      let pos = Position {
-        x: active_block_position.x,
-        y: active_block_position.y - 1,
-      };
-      if !is_collision(&pos) {
-        Direction::Down
-      } else {
-        Direction::Neutral
-      }
+      Direction::Down
     } else if keyboard_input.just_pressed(KeyCode::Up) {
       Direction::Up
     } else {
@@ -199,23 +178,68 @@ fn block_movement_input(
   }
 }
 
-fn block_free_fall(mut query: Query<&mut Position, With<ActiveBlock>>) {
-  if let Ok(mut position) = query.single_mut() {
-    position.y -= 1
+fn block_free_fall(
+  mut query: Query<(&ActiveBlock, &mut Position), Without<StackedBlock>>,
+  stacked_block_query: Query<(&StackedBlock, &Position), Without<ActiveBlock>>,
+) {
+  if let Ok((_, mut position)) = query.single_mut() {
+    let is_collision = |pos: &Position| -> bool {
+      stacked_block_query
+        .iter()
+        .any(|(_, stacked_pos)| stacked_pos == pos)
+    };
+    let p = Position {
+      x: position.x,
+      y: position.y - 1,
+    };
+    if position.y > 0 && !is_collision(&p) {
+      position.y -= 1
+    }
   }
 }
 
-fn block_movement(mut active_block_position: Query<(&mut Position, &ActiveBlock)>) {
-  if let Ok((mut pos, active_block)) = active_block_position.single_mut() {
-    if active_block.direction == Direction::Left && pos.x > 0 {
-      pos.x -= 1;
-    } else if active_block.direction == Direction::Right && pos.x < (ARENA_WIDTH - 1) as i32 {
-      pos.x += 1;
-    } else if active_block.direction == Direction::Down && pos.y > 0 {
-      // 急降下
-      pos.y -= 1;
-    } else if active_block.direction == Direction::Up && pos.y < (ARENA_HEIGHT - 1) as i32 {
-      pos.y += 1;
+fn block_movement(
+  mut active_block_query: Query<(&mut Position, &ActiveBlock), Without<StackedBlock>>,
+  stacked_block_query: Query<&Position, With<StackedBlock>>,
+) {
+  if let Ok((mut active_block_position, active_block)) = active_block_query.single_mut() {
+    let is_collision = |pos: &Position| -> bool {
+      stacked_block_query
+        .iter()
+        .any(|stacked_pos| stacked_pos == pos)
+    };
+
+    if active_block.direction == Direction::Left && active_block_position.x > 0 {
+      let pos = Position {
+        x: active_block_position.x - 1,
+        y: active_block_position.y,
+      };
+      if !is_collision(&pos) {
+        active_block_position.x -= 1;
+      }
+    } else if active_block.direction == Direction::Right
+      && active_block_position.x < (ARENA_WIDTH - 1) as i32
+    {
+      let pos = Position {
+        x: active_block_position.x + 1,
+        y: active_block_position.y,
+      };
+      if !is_collision(&pos) {
+        active_block_position.x += 1;
+      }
+    } else if active_block.direction == Direction::Down && active_block_position.y > 0 {
+      let pos = Position {
+        x: active_block_position.x,
+        y: active_block_position.y - 1,
+      };
+      if !is_collision(&pos) {
+        // 急降下
+        active_block_position.y -= 1;
+      }
+    } else if active_block.direction == Direction::Up
+      && active_block_position.y < (ARENA_HEIGHT - 1) as i32
+    {
+      active_block_position.y += 1;
     }
   }
 }
@@ -277,8 +301,11 @@ fn stack_block(
       if active_block_position.y - 1 == stacked_block_position.y
         && active_block_position.x == stacked_block_position.x
       {
-        stack(stacked_block_position.x, stacked_block_position.y + 1);
-        break;
+        stack(
+          stacked_block_position.x,
+          max(active_block_position.y, stacked_block_position.y + 1),
+        );
+        return;
       }
     }
   }
