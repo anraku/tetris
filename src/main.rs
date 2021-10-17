@@ -1,4 +1,5 @@
 use std::cmp::max;
+use std::hash::Hash;
 
 use bevy::core::FixedTimestep;
 use bevy::prelude::*;
@@ -27,7 +28,7 @@ struct ActiveBlock {
   direction: Direction,
 }
 struct StackedBlock;
-#[derive(PartialEq)]
+#[derive(Eq, PartialEq, Hash, Debug)]
 struct Position {
   x: i32,
   y: i32,
@@ -72,6 +73,7 @@ enum Label {
   Input,
   Movement,
   Stack,
+  Destroy,
 }
 
 fn main() {
@@ -113,7 +115,13 @@ fn main() {
             .label(Label::Stack)
             .after(Label::Movement),
         )
-        .with_system(respawn_block.system().after(Label::Stack)),
+        .with_system(
+          destroy_block
+            .system()
+            .label(Label::Destroy)
+            .after(Label::Stack),
+        )
+        .with_system(respawn_block.system().after(Label::Destroy)),
     )
     .add_system(block_movement.system())
     .add_system_set_to_stage(
@@ -307,6 +315,34 @@ fn stack_block(
         );
         return;
       }
+    }
+  }
+}
+
+fn destroy_block(
+  mut commands: Commands,
+  mut query: Query<(Entity, &mut Position), With<StackedBlock>>,
+) {
+  for h in 0..ARENA_HEIGHT {
+    let mut entities = Vec::new();
+    for (entity, position) in query.iter_mut() {
+      if position.y == h as i32 {
+        entities.push(entity);
+      }
+    }
+    if entities.len() == ARENA_WIDTH as usize {
+      // blocksにあるBlockを削除
+      for &entity in entities.iter() {
+        commands.entity(entity).despawn();
+      }
+      // hより高いBlockをすべて高さを-1する
+      for (_, mut position) in query.iter_mut() {
+        if position.y > h as i32 {
+          position.y -= 1;
+        }
+      }
+    } else if entities.len() == 0 {
+      return;
     }
   }
 }
