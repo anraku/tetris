@@ -65,9 +65,6 @@ enum Direction {
 }
 // endregion: Component
 
-// region: Event
-struct RespawnEvent;
-
 #[derive(SystemLabel, Debug, Hash, PartialEq, Eq, Clone)]
 enum Label {
   Input,
@@ -86,7 +83,6 @@ fn main() {
     }) // Windowの設定
     .insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
     .insert_resource(MainWindow::default())
-    .add_event::<RespawnEvent>()
     .add_startup_system(setup.system())
     .add_startup_stage("game_setup", SystemStage::single(spawn_block.system()))
     .add_system(
@@ -159,9 +155,9 @@ fn spawn_block(mut commands: Commands, materials: Res<Materials>) {
 fn respawn_block(
   commands: Commands,
   materials: Res<Materials>,
-  mut reader: EventReader<RespawnEvent>,
+  mut active_block_query: Query<&mut ActiveBlock>,
 ) {
-  if reader.iter().next().is_some() {
+  if let Err(_) = active_block_query.single_mut() {
     spawn_block(commands, materials);
   }
 }
@@ -279,7 +275,6 @@ fn position_translation(windows: Res<Windows>, mut q: Query<(&Position, &mut Tra
 fn stack_block(
   mut commands: Commands,
   materials: Res<Materials>,
-  mut writer: EventWriter<RespawnEvent>,
   active_block_query: Query<(Entity, &Position), With<ActiveBlock>>,
   stacked_block_query: Query<&Position, With<StackedBlock>>,
 ) {
@@ -297,14 +292,12 @@ fn stack_block(
         .insert(StackedBlock)
         .insert(Position { x, y })
         .insert(Size::square(0.8));
-      writer.send(RespawnEvent);
     };
 
     if active_block_position.y <= 0 {
       stack(active_block_position.x, max(active_block_position.y, 0));
       return;
     }
-
     for stacked_block_position in stacked_block_query.iter() {
       if active_block_position.y - 1 == stacked_block_position.y
         && active_block_position.x == stacked_block_position.x
