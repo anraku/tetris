@@ -94,11 +94,7 @@ fn main() {
     .add_system_set(
       SystemSet::new()
         .with_run_criteria(FixedTimestep::step(0.5))
-        .with_system(
-          block_free_fall // 自由落下システムを追加する
-            .system()
-            .label(Label::Movement),
-        )
+        .with_system(block_free_fall.system().label(Label::Movement))
         .with_system(
           block_movement
             .system()
@@ -155,9 +151,9 @@ fn spawn_block(mut commands: Commands, materials: Res<Materials>) {
 fn respawn_block(
   commands: Commands,
   materials: Res<Materials>,
-  mut active_block_query: Query<&mut ActiveBlock>,
+  active_block_query: Query<&ActiveBlock>,
 ) {
-  if let Err(_) = active_block_query.single_mut() {
+  if active_block_query.iter().len() == 0 {
     spawn_block(commands, materials);
   }
 }
@@ -166,7 +162,7 @@ fn block_movement_input(
   keyboard_input: Res<Input<KeyCode>>,
   mut active_block_query: Query<&mut ActiveBlock>,
 ) {
-  if let Ok(mut active_block) = active_block_query.single_mut() {
+  for mut active_block in active_block_query.iter_mut() {
     let dir: Direction = if keyboard_input.just_pressed(KeyCode::Left) {
       Direction::Left
     } else if keyboard_input.just_pressed(KeyCode::Right) {
@@ -186,7 +182,7 @@ fn block_free_fall(
   mut query: Query<(&ActiveBlock, &mut Position), Without<StackedBlock>>,
   stacked_block_query: Query<(&StackedBlock, &Position), Without<ActiveBlock>>,
 ) {
-  if let Ok((_, mut position)) = query.single_mut() {
+  for (_, mut position) in query.iter_mut() {
     let is_collision = |pos: &Position| -> bool {
       stacked_block_query
         .iter()
@@ -206,7 +202,7 @@ fn block_movement(
   mut active_block_query: Query<(&mut Position, &ActiveBlock), Without<StackedBlock>>,
   stacked_block_query: Query<&Position, With<StackedBlock>>,
 ) {
-  if let Ok((mut active_block_position, active_block)) = active_block_query.single_mut() {
+  for (mut active_block_position, active_block) in active_block_query.iter_mut() {
     let is_collision = |pos: &Position| -> bool {
       stacked_block_query
         .iter()
@@ -278,7 +274,7 @@ fn stack_block(
   active_block_query: Query<(Entity, &Position), With<ActiveBlock>>,
   stacked_block_query: Query<&Position, With<StackedBlock>>,
 ) {
-  if let Ok((entity, active_block_position)) = active_block_query.single() {
+  for (entity, active_block_position) in active_block_query.iter() {
     let mut stack = |x: i32, y: i32| {
       // despawn active block
       commands.entity(entity).despawn();
