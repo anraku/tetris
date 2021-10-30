@@ -1,4 +1,8 @@
+#[macro_use]
+extern crate lazy_static;
+
 use std::cmp::max;
+use std::collections::HashMap;
 use std::hash::Hash;
 
 use bevy::core::FixedTimestep;
@@ -28,8 +32,8 @@ struct ActiveBlock {
   direction: Direction,
 }
 struct StackedBlock;
-#[derive(Eq, PartialEq, Hash, Debug)]
-struct Position {
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct Position {
   x: i32,
   y: i32,
 }
@@ -71,6 +75,14 @@ enum Label {
   Movement,
   Stack,
   Destroy,
+}
+
+lazy_static! {
+  pub static ref HASHMAP: HashMap<u32, Vec<Position>> = {
+    let mut m = HashMap::new();
+    m.insert(0, vec![Position { x: 3, y: 20 }]);
+    m
+  };
 }
 
 fn main() {
@@ -135,17 +147,22 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
 }
 
 fn spawn_block(mut commands: Commands, materials: Res<Materials>) {
-  commands
-    .spawn_bundle(SpriteBundle {
-      material: materials.gray_block.clone(),
-      sprite: Sprite::new(Vec2::new(10.0, 10.0)),
-      ..Default::default()
-    })
-    .insert(ActiveBlock {
-      direction: Direction::Neutral,
-    })
-    .insert(Position { x: 3, y: 20 })
-    .insert(Size::square(0.8));
+  if let Some(positions) = HASHMAP.get(&0) {
+    for position in positions.iter() {
+      println!("{:?}", position);
+      commands
+        .spawn_bundle(SpriteBundle {
+          material: materials.gray_block.clone(),
+          sprite: Sprite::new(Vec2::new(10.0, 10.0)),
+          ..Default::default()
+        })
+        .insert(ActiveBlock {
+          direction: Direction::Neutral,
+        })
+        .insert(position.clone())
+        .insert(Size::square(0.8));
+    }
+  }
 }
 
 fn respawn_block(
