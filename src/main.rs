@@ -7,6 +7,7 @@ use std::hash::Hash;
 
 use bevy::core::FixedTimestep;
 use bevy::prelude::*;
+use rand::prelude::random;
 
 const ARENA_WIDTH: u32 = 10;
 const ARENA_HEIGHT: u32 = 20;
@@ -77,14 +78,6 @@ enum Label {
   Destroy,
 }
 
-lazy_static! {
-  pub static ref HASHMAP: HashMap<u32, Vec<Position>> = {
-    let mut m = HashMap::new();
-    m.insert(0, vec![Position { x: 3, y: 20 }]);
-    m
-  };
-}
-
 fn main() {
   App::build()
     .insert_resource(WindowDescriptor {
@@ -146,10 +139,23 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
   });
 }
 
+lazy_static! {
+  pub static ref BLOCKMAP: HashMap<u32, Vec<Position>> = {
+    let mut m = HashMap::new();
+    m.insert(0, vec![Position { x: 0, y: 0 }]); // Block1つだけ
+    m.insert(1, vec![Position { x: 0, y: 0 }, Position { x: 1, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }]); // square
+    m.insert(2, vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }]); // S字
+    m
+  };
+}
+
 fn spawn_block(mut commands: Commands, materials: Res<Materials>) {
-  if let Some(positions) = HASHMAP.get(&0) {
+  let idx = (random::<f32>() * 3 as f32) as u32;
+  if let Some(positions) = BLOCKMAP.get(&idx) {
+    let base_position_x = 3;
+    let base_position_y = (ARENA_HEIGHT - 1) as i32;
+
     for position in positions.iter() {
-      println!("{:?}", position);
       commands
         .spawn_bundle(SpriteBundle {
           material: materials.gray_block.clone(),
@@ -159,7 +165,10 @@ fn spawn_block(mut commands: Commands, materials: Res<Materials>) {
         .insert(ActiveBlock {
           direction: Direction::Neutral,
         })
-        .insert(position.clone())
+        .insert(Position {
+          x: position.x + base_position_x,
+          y: position.y + base_position_y,
+        })
         .insert(Size::square(0.8));
     }
   }
