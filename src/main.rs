@@ -10,6 +10,7 @@ use rand::prelude::random;
 
 const ARENA_WIDTH: u32 = 10;
 const ARENA_HEIGHT: u32 = 20;
+const BLOCK_RESPAWN_DELAY: f64 = 1.;
 
 // region: Resources
 struct Materials {
@@ -27,6 +28,7 @@ impl Default for MainWindow {
 }
 struct ExistActiveBlocks(bool);
 struct BlockDirection(Direction);
+struct StackTime(f64);
 // endregion: Resource
 
 // region: Component
@@ -89,6 +91,7 @@ fn main() {
     .insert_resource(MainWindow::default())
     .insert_resource(ExistActiveBlocks(false))
     .insert_resource(BlockDirection(Direction::Neutral))
+    .insert_resource(StackTime(0.))
     .add_startup_system(setup.system())
     .add_startup_stage("game_setup", SystemStage::single(spawn_block.system()))
     .add_system(
@@ -120,11 +123,7 @@ fn main() {
         .label(Label::Destroy)
         .after(Label::Stack),
     )
-    .add_system_set(
-      SystemSet::new()
-        .with_run_criteria(FixedTimestep::step(0.5))
-        .with_system(respawn_block.system().after(Label::Destroy)),
-    ) // TODO ブロックを積んでから0.5秒くらい待つようにする
+    .add_system(respawn_block.system().after(Label::Destroy))
     .add_system(block_movement.system())
     .add_system_set_to_stage(
       CoreStage::PostUpdate,
@@ -188,8 +187,11 @@ fn respawn_block(
   commands: Commands,
   materials: Res<Materials>,
   exist_active_blocks: ResMut<ExistActiveBlocks>,
+  time: Res<Time>,
+  stack_time: ResMut<StackTime>,
 ) {
-  if !exist_active_blocks.0 {
+  let now = time.seconds_since_startup();
+  if !exist_active_blocks.0 && now > stack_time.0 + BLOCK_RESPAWN_DELAY {
     spawn_block(commands, materials, exist_active_blocks);
   }
 }
@@ -329,6 +331,8 @@ fn stack_block(
   active_block_query: Query<(Entity, &Position), With<ActiveBlock>>,
   stacked_block_query: Query<&Position, With<StackedBlock>>,
   mut exist_active_blocks: ResMut<ExistActiveBlocks>,
+  time: Res<Time>,
+  mut stack_time: ResMut<StackTime>,
 ) {
   let mut stack = || {
     for (entity, active_block_position) in active_block_query.iter() {
@@ -350,6 +354,7 @@ fn stack_block(
     }
 
     exist_active_blocks.0 = false;
+    stack_time.0 = time.seconds_since_startup();
   };
 
   let is_collision = |pos: &Position| -> bool {
