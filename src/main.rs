@@ -203,6 +203,7 @@ fn block_movement_input(
   } else if keyboard_input.just_pressed(KeyCode::Right) {
     Direction::Right
   } else if keyboard_input.pressed(KeyCode::Down) {
+    // 急降下
     Direction::Down
   } else if keyboard_input.just_pressed(KeyCode::Up) {
     Direction::Up
@@ -241,38 +242,57 @@ fn block_movement(
   block_direction: ResMut<BlockDirection>,
   stacked_block_query: Query<&Position, With<StackedBlock>>,
 ) {
-  for mut active_block_position in active_block_query.iter_mut() {
-    let is_collision = |pos: &Position| -> bool {
-      stacked_block_query
-        .iter()
-        .any(|stacked_pos| stacked_pos == pos)
-    };
+  let is_collision = |pos: &Position| -> bool {
+    stacked_block_query
+      .iter()
+      .any(|stacked_pos| stacked_pos == pos)
+  };
+  let direction = block_direction.0;
 
-    if block_direction.0 == Direction::Left && active_block_position.x > 0 {
+  let mut collision_flag = false;
+  if direction == Direction::Left {
+    for active_block_position in active_block_query.iter_mut() {
       let pos = Position {
         x: active_block_position.x - 1,
         y: active_block_position.y,
       };
-      if !is_collision(&pos) {
-        active_block_position.x -= 1;
+      if is_collision(&pos) || active_block_position.x <= 0 {
+        collision_flag = true;
       }
-    } else if block_direction.0 == Direction::Right
-      && active_block_position.x < (ARENA_WIDTH - 1) as i32
-    {
+    }
+  } else if direction == Direction::Right {
+    for active_block_position in active_block_query.iter_mut() {
       let pos = Position {
         x: active_block_position.x + 1,
         y: active_block_position.y,
       };
-      if !is_collision(&pos) {
-        active_block_position.x += 1;
+      if is_collision(&pos) || active_block_position.x >= (ARENA_WIDTH - 1) as i32 {
+        collision_flag = true;
       }
-    } else if block_direction.0 == Direction::Down && active_block_position.y > 0 {
+    }
+  } else if direction == Direction::Down {
+    for active_block_position in active_block_query.iter_mut() {
       let pos = Position {
         x: active_block_position.x,
         y: active_block_position.y - 1,
       };
-      if !is_collision(&pos) {
-        // 急降下
+      if is_collision(&pos) || active_block_position.y <= 0 {
+        collision_flag = true;
+      }
+    }
+  }
+
+  if !collision_flag {
+    if direction == Direction::Left {
+      for mut active_block_position in active_block_query.iter_mut() {
+        active_block_position.x -= 1;
+      }
+    } else if direction == Direction::Right {
+      for mut active_block_position in active_block_query.iter_mut() {
+        active_block_position.x += 1;
+      }
+    } else if direction == Direction::Down {
+      for mut active_block_position in active_block_query.iter_mut() {
         active_block_position.y -= 1;
       }
     }
