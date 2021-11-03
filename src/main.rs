@@ -106,21 +106,25 @@ fn main() {
             .system()
             .label(Label::Movement)
             .after(Label::Input),
-        )
-        .with_system(
-          stack_block
-            .system()
-            .label(Label::Stack)
-            .after(Label::Movement),
-        )
-        .with_system(
-          destroy_block
-            .system()
-            .label(Label::Destroy)
-            .after(Label::Stack),
-        )
-        .with_system(respawn_block.system().after(Label::Destroy)),
+        ),
     )
+    .add_system(
+      stack_block
+        .system()
+        .label(Label::Stack)
+        .after(Label::Movement),
+    )
+    .add_system(
+      destroy_block
+        .system()
+        .label(Label::Destroy)
+        .after(Label::Stack),
+    )
+    .add_system_set(
+      SystemSet::new()
+        .with_run_criteria(FixedTimestep::step(0.5))
+        .with_system(respawn_block.system().after(Label::Destroy)),
+    ) // TODO ブロックを積んでから0.5秒くらい待つようにする
     .add_system(block_movement.system())
     .add_system_set_to_stage(
       CoreStage::PostUpdate,
@@ -211,7 +215,11 @@ fn block_movement_input(
 fn block_free_fall(
   mut query: Query<(&ActiveBlock, &mut Position), Without<StackedBlock>>,
   stacked_block_query: Query<(&StackedBlock, &Position), Without<ActiveBlock>>,
+  block_direction: ResMut<BlockDirection>,
 ) {
+  if block_direction.0 == Direction::Down {
+    return;
+  }
   for (_, mut position) in query.iter_mut() {
     let is_collision = |pos: &Position| -> bool {
       stacked_block_query
@@ -267,10 +275,6 @@ fn block_movement(
         // 急降下
         active_block_position.y -= 1;
       }
-    } else if block_direction.0 == Direction::Up
-      && active_block_position.y < (ARENA_HEIGHT - 1) as i32
-    {
-      active_block_position.y += 1;
     }
   }
 }
@@ -328,19 +332,31 @@ fn stack_block(
     exist_active_blocks.0 = false;
   };
 
+  let is_collision = |pos: &Position| -> bool {
+    stacked_block_query
+      .iter()
+      .any(|stacked_pos| stacked_pos == pos)
+  };
+
+  // いずれかのアクティブブロックが地面に接地
+  if active_block_query.iter().any(|(_, p)| p.y <= 0) {
+    stack();
+    return;
+  }
+
+  let mut collision_flag = false;
   for (_, active_block_position) in active_block_query.iter() {
-    if active_block_position.y <= 0 {
-      stack();
-      return;
+    let position = Position {
+      x: active_block_position.x,
+      y: active_block_position.y - 1,
+    };
+    if is_collision(&position) {
+      collision_flag = true
     }
-    for stacked_block_position in stacked_block_query.iter() {
-      if active_block_position.y - 1 == stacked_block_position.y
-        && active_block_position.x == stacked_block_position.x
-      {
-        stack();
-        return;
-      }
-    }
+  }
+
+  if collision_flag {
+    stack();
   }
 }
 
