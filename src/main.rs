@@ -148,7 +148,11 @@ lazy_static! {
     let mut m = HashMap::new();
     m.insert(0, vec![Position { x: 0, y: 0 }]); // Block1つだけ
     m.insert(1, vec![Position { x: 0, y: 0 }, Position { x: 1, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }]); // square
-    m.insert(2, vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }]); // S字
+    m.insert(2, vec![Position { x: -1, y: 1 }, Position { x: 0, y: 1 }, Position { x: 0, y: 0 }, Position { x: 1, y: 0 }]); // S字
+    m.insert(3, vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }]); // 逆S字
+    m.insert(4, vec![Position { x: 1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }]); // L字
+    m.insert(5, vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }]); // 逆L字
+    m.insert(6, vec![Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }, Position { x: 0, y: 3 }]); // I字
     m
   };
 }
@@ -159,7 +163,7 @@ fn spawn_block(
   mut exist_active_blocks: ResMut<ExistActiveBlocks>,
 ) {
   if !exist_active_blocks.0 {
-    let idx = (random::<f32>() * 3 as f32) as u32;
+    let idx = (random::<f32>() * 7 as f32) as u32; // TODO Hashmapのサイズから動的に求めたい
     if let Some(positions) = BLOCKMAP.get(&idx) {
       let base_position_x = 3;
       let base_position_y = (ARENA_HEIGHT - 1) as i32;
