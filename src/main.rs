@@ -26,13 +26,17 @@ impl Default for MainWindow {
     Self { w: 400, h: 800 }
   }
 }
-struct ExistActiveBlocks(bool);
-struct BlockDirection(Direction);
+struct ActiveBlock {
+  is_on: bool,
+  direction: Direction,
+  square_size: usize,
+}
+// struct ActiveBlock
 struct StackTime(f64);
 // endregion: Resource
 
 // region: Component
-struct ActiveBlock {}
+struct PrimitiveBlock {}
 struct StackedBlock;
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Position {
@@ -89,8 +93,11 @@ fn main() {
     }) // Windowの設定
     .insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
     .insert_resource(MainWindow::default())
-    .insert_resource(ExistActiveBlocks(false))
-    .insert_resource(BlockDirection(Direction::Neutral))
+    .insert_resource(ActiveBlock {
+      is_on: false,
+      direction: Direction::Neutral,
+      square_size: 0,
+    })
     .insert_resource(StackTime(0.))
     .add_startup_system(setup.system())
     .add_startup_stage("game_setup", SystemStage::single(spawn_block.system()))
@@ -144,15 +151,15 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
 }
 
 lazy_static! {
-  pub static ref BLOCKMAP: HashMap<u32, Vec<Position>> = {
+  pub static ref BLOCKMAP: HashMap<u32, (Vec<Position>, usize)> = {
     let mut m = HashMap::new();
-    m.insert(0, vec![Position { x: 0, y: 0 }]); // Block1つだけ
-    m.insert(1, vec![Position { x: 0, y: 0 }, Position { x: 1, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }]); // square
-    m.insert(2, vec![Position { x: -1, y: 1 }, Position { x: 0, y: 1 }, Position { x: 0, y: 0 }, Position { x: 1, y: 0 }]); // S字
-    m.insert(3, vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }]); // 逆S字
-    m.insert(4, vec![Position { x: 1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }]); // L字
-    m.insert(5, vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }]); // 逆L字
-    m.insert(6, vec![Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }, Position { x: 0, y: 3 }]); // I字
+    m.insert(0, (vec![Position { x: 0, y: 0 }], 1)); // Block1つだけ
+    m.insert(1, (vec![Position { x: 0, y: 0 }, Position { x: 1, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }], 2)); // square
+    m.insert(2, (vec![Position { x: -1, y: 1 }, Position { x: 0, y: 1 }, Position { x: 0, y: 0 }, Position { x: 1, y: 0 }], 3)); // S字
+    m.insert(3, (vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }], 3)); // 逆S字
+    m.insert(4, (vec![Position { x: 1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }], 3)); // L字
+    m.insert(5, (vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }], 3)); // 逆L字
+    m.insert(6, (vec![Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }, Position { x: 0, y: 3 }], 4)); // I字
     m
   };
 }
@@ -160,13 +167,14 @@ lazy_static! {
 fn spawn_block(
   mut commands: Commands,
   materials: Res<Materials>,
-  mut exist_active_blocks: ResMut<ExistActiveBlocks>,
+  mut active_block: ResMut<ActiveBlock>,
 ) {
-  if !exist_active_blocks.0 {
-    let idx = (random::<f32>() * 7 as f32) as u32; // TODO Hashmapのサイズから動的に求めたい
-    if let Some(positions) = BLOCKMAP.get(&idx) {
+  if !active_block.is_on {
+    let idx = (random::<f32>() * BLOCKMAP.keys().len() as f32) as u32;
+    if let Some((positions, square_size)) = BLOCKMAP.get(&idx) {
       let base_position_x = 3;
       let base_position_y = (ARENA_HEIGHT - 1) as i32;
+      active_block.square_size = *square_size;
 
       for position in positions.iter() {
         commands
@@ -175,34 +183,34 @@ fn spawn_block(
             sprite: Sprite::new(Vec2::new(10.0, 10.0)),
             ..Default::default()
           })
-          .insert(ActiveBlock {})
+          .insert(PrimitiveBlock {})
           .insert(Position {
             x: position.x + base_position_x,
             y: position.y + base_position_y,
           })
           .insert(Size::square(0.8));
       }
+      active_block.is_on = true;
     }
-    exist_active_blocks.0 = true;
   }
 }
 
 fn respawn_block(
   commands: Commands,
   materials: Res<Materials>,
-  exist_active_blocks: ResMut<ExistActiveBlocks>,
+  active_block: ResMut<ActiveBlock>,
   time: Res<Time>,
   stack_time: ResMut<StackTime>,
 ) {
   let now = time.seconds_since_startup();
-  if !exist_active_blocks.0 && now > stack_time.0 + BLOCK_RESPAWN_DELAY {
-    spawn_block(commands, materials, exist_active_blocks);
+  if !active_block.is_on && now > stack_time.0 + BLOCK_RESPAWN_DELAY {
+    spawn_block(commands, materials, active_block);
   }
 }
 
 fn block_movement_input(
   keyboard_input: Res<Input<KeyCode>>,
-  mut block_direction: ResMut<BlockDirection>,
+  mut active_block: ResMut<ActiveBlock>,
 ) {
   let dir: Direction = if keyboard_input.just_pressed(KeyCode::Left) {
     Direction::Left
@@ -216,15 +224,15 @@ fn block_movement_input(
   } else {
     Direction::Neutral
   };
-  block_direction.0 = dir;
+  active_block.direction = dir;
 }
 
 fn block_free_fall(
-  mut query: Query<(&ActiveBlock, &mut Position), Without<StackedBlock>>,
-  stacked_block_query: Query<(&StackedBlock, &Position), Without<ActiveBlock>>,
-  block_direction: ResMut<BlockDirection>,
+  mut query: Query<(&PrimitiveBlock, &mut Position), Without<StackedBlock>>,
+  stacked_block_query: Query<(&StackedBlock, &Position), Without<PrimitiveBlock>>,
+  active_block: ResMut<ActiveBlock>,
 ) {
-  if block_direction.0 == Direction::Down {
+  if active_block.direction == Direction::Down {
     return;
   }
   for (_, mut position) in query.iter_mut() {
@@ -244,8 +252,8 @@ fn block_free_fall(
 }
 
 fn block_movement(
-  mut active_block_query: Query<&mut Position, Without<StackedBlock>>,
-  block_direction: ResMut<BlockDirection>,
+  mut primitive_block_query: Query<&mut Position, Without<StackedBlock>>,
+  active_block: ResMut<ActiveBlock>,
   stacked_block_query: Query<&Position, With<StackedBlock>>,
 ) {
   let is_collision = |pos: &Position| -> bool {
@@ -253,36 +261,36 @@ fn block_movement(
       .iter()
       .any(|stacked_pos| stacked_pos == pos)
   };
-  let direction = block_direction.0;
+  let direction = active_block.direction;
 
   let mut collision_flag = false;
   if direction == Direction::Left {
-    for active_block_position in active_block_query.iter_mut() {
+    for primitive_block_position in primitive_block_query.iter_mut() {
       let pos = Position {
-        x: active_block_position.x - 1,
-        y: active_block_position.y,
+        x: primitive_block_position.x - 1,
+        y: primitive_block_position.y,
       };
-      if is_collision(&pos) || active_block_position.x <= 0 {
+      if is_collision(&pos) || primitive_block_position.x <= 0 {
         collision_flag = true;
       }
     }
   } else if direction == Direction::Right {
-    for active_block_position in active_block_query.iter_mut() {
+    for primitive_block_position in primitive_block_query.iter_mut() {
       let pos = Position {
-        x: active_block_position.x + 1,
-        y: active_block_position.y,
+        x: primitive_block_position.x + 1,
+        y: primitive_block_position.y,
       };
-      if is_collision(&pos) || active_block_position.x >= (ARENA_WIDTH - 1) as i32 {
+      if is_collision(&pos) || primitive_block_position.x >= (ARENA_WIDTH - 1) as i32 {
         collision_flag = true;
       }
     }
   } else if direction == Direction::Down {
-    for active_block_position in active_block_query.iter_mut() {
+    for primitive_block_position in primitive_block_query.iter_mut() {
       let pos = Position {
-        x: active_block_position.x,
-        y: active_block_position.y - 1,
+        x: primitive_block_position.x,
+        y: primitive_block_position.y - 1,
       };
-      if is_collision(&pos) || active_block_position.y <= 0 {
+      if is_collision(&pos) || primitive_block_position.y <= 0 {
         collision_flag = true;
       }
     }
@@ -290,20 +298,22 @@ fn block_movement(
 
   if !collision_flag {
     if direction == Direction::Left {
-      for mut active_block_position in active_block_query.iter_mut() {
-        active_block_position.x -= 1;
+      for mut primitive_block_position in primitive_block_query.iter_mut() {
+        primitive_block_position.x -= 1;
       }
     } else if direction == Direction::Right {
-      for mut active_block_position in active_block_query.iter_mut() {
-        active_block_position.x += 1;
+      for mut primitive_block_position in primitive_block_query.iter_mut() {
+        primitive_block_position.x += 1;
       }
     } else if direction == Direction::Down {
-      for mut active_block_position in active_block_query.iter_mut() {
-        active_block_position.y -= 1;
+      for mut primitive_block_position in primitive_block_query.iter_mut() {
+        primitive_block_position.y -= 1;
       }
     }
   }
 }
+
+fn block_transpose(active_block: Res<ActiveBlock>) {}
 
 fn size_scaling(window: Res<MainWindow>, mut q: Query<(&Size, &mut Sprite)>) {
   for (sprite_size, mut sprite) in q.iter_mut() {
@@ -332,14 +342,14 @@ fn position_translation(windows: Res<Windows>, mut q: Query<(&Position, &mut Tra
 fn stack_block(
   mut commands: Commands,
   materials: Res<Materials>,
-  active_block_query: Query<(Entity, &Position), With<ActiveBlock>>,
+  mut active_block: ResMut<ActiveBlock>,
+  primitive_block_query: Query<(Entity, &Position), With<PrimitiveBlock>>,
   stacked_block_query: Query<&Position, With<StackedBlock>>,
-  mut exist_active_blocks: ResMut<ExistActiveBlocks>,
   time: Res<Time>,
   mut stack_time: ResMut<StackTime>,
 ) {
   let mut stack = || {
-    for (entity, active_block_position) in active_block_query.iter() {
+    for (entity, primitive_block_position) in primitive_block_query.iter() {
       // despawn active block
       commands.entity(entity).despawn();
 
@@ -351,13 +361,13 @@ fn stack_block(
         })
         .insert(StackedBlock)
         .insert(Position {
-          x: active_block_position.x,
-          y: active_block_position.y,
+          x: primitive_block_position.x,
+          y: primitive_block_position.y,
         })
         .insert(Size::square(0.8));
     }
 
-    exist_active_blocks.0 = false;
+    active_block.is_on = false;
     stack_time.0 = time.seconds_since_startup();
   };
 
@@ -368,16 +378,16 @@ fn stack_block(
   };
 
   // いずれかのアクティブブロックが地面に接地
-  if active_block_query.iter().any(|(_, p)| p.y <= 0) {
+  if primitive_block_query.iter().any(|(_, p)| p.y <= 0) {
     stack();
     return;
   }
 
   let mut collision_flag = false;
-  for (_, active_block_position) in active_block_query.iter() {
+  for (_, primitive_block_position) in primitive_block_query.iter() {
     let position = Position {
-      x: active_block_position.x,
-      y: active_block_position.y - 1,
+      x: primitive_block_position.x,
+      y: primitive_block_position.y - 1,
     };
     if is_collision(&position) {
       collision_flag = true
