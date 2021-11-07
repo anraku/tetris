@@ -171,10 +171,9 @@ fn spawn_block(
 ) {
   if !active_block.is_on {
     let idx = (random::<f32>() * BLOCKMAP.keys().len() as f32) as u32;
-    if let Some((positions, square_size)) = BLOCKMAP.get(&idx) {
+    if let Some(positions) = BLOCKMAP.get(&idx) {
       let base_position_x = 3;
       let base_position_y = (ARENA_HEIGHT - 1) as i32;
-      active_block.square_size = *square_size;
 
       for position in positions.iter() {
         commands
@@ -190,8 +189,8 @@ fn spawn_block(
           })
           .insert(Size::square(0.8));
       }
-      active_block.is_on = true;
     }
+    active_block.is_on = true;
   }
 }
 
@@ -227,15 +226,23 @@ fn block_movement_input(
   active_block.direction = dir;
 }
 
+fn move_tetoriminos(mut t: Query<&mut Position, Without<StackedBlock>>, diff: &Position) {
+  for mut position in t.iter_mut() {
+    position.x += diff.x;
+    position.y += diff.y;
+  }
+}
+
 fn block_free_fall(
-  mut query: Query<(&PrimitiveBlock, &mut Position), Without<StackedBlock>>,
+  mut query: Query<&mut Position, Without<StackedBlock>>,
   stacked_block_query: Query<(&StackedBlock, &Position), Without<PrimitiveBlock>>,
-  active_block: ResMut<ActiveBlock>,
+  active_block: Res<ActiveBlock>,
 ) {
   if active_block.direction == Direction::Down {
     return;
   }
-  for (_, mut position) in query.iter_mut() {
+  let mut collision_flag = false;
+  for position in query.iter_mut() {
     let is_collision = |pos: &Position| -> bool {
       stacked_block_query
         .iter()
@@ -245,9 +252,13 @@ fn block_free_fall(
       x: position.x,
       y: position.y - 1,
     };
-    if position.y > 0 && !is_collision(&p) {
-      position.y -= 1
+    if position.y <= 0 && !is_collision(&p) {
+      collision_flag = true;
     }
+  }
+  let p = Position { x: 0, y: -1 };
+  if !collision_flag {
+    move_tetoriminos(query, &p);
   }
 }
 
