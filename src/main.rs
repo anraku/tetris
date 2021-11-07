@@ -1,3 +1,5 @@
+mod main_test;
+
 #[macro_use]
 extern crate lazy_static;
 
@@ -6,6 +8,7 @@ use std::hash::Hash;
 
 use bevy::core::FixedTimestep;
 use bevy::prelude::*;
+use ndarray::prelude::*;
 use rand::prelude::random;
 
 const ARENA_WIDTH: u32 = 10;
@@ -29,9 +32,9 @@ impl Default for MainWindow {
 struct ActiveBlock {
   is_on: bool,
   direction: Direction,
-  square_size: usize,
+  position: Position,
+  block_idx: u32,
 }
-// struct ActiveBlock
 struct StackTime(f64);
 // endregion: Resource
 
@@ -79,6 +82,7 @@ enum Direction {
 enum Label {
   Input,
   Movement,
+  Transpose,
   Stack,
   Destroy,
 }
@@ -96,7 +100,11 @@ fn main() {
     .insert_resource(ActiveBlock {
       is_on: false,
       direction: Direction::Neutral,
-      square_size: 0,
+      position: Position {
+        x: 3,
+        y: ARENA_WIDTH as i32 - 1,
+      },
+      block_idx: 0,
     })
     .insert_resource(StackTime(0.))
     .add_startup_system(setup.system())
@@ -107,15 +115,23 @@ fn main() {
         .label(Label::Input)
         .before(Label::Movement),
     )
+    // .add_sysem(block_transpose.system().label(Label::Transpose))
     .add_system_set(
       SystemSet::new()
         .with_run_criteria(FixedTimestep::step(0.5))
-        .with_system(block_free_fall.system().label(Label::Movement))
+        .with_system(
+          block_free_fall
+            .system()
+            .label(Label::Movement)
+            .after(Label::Input)
+            .after(Label::Transpose),
+        )
         .with_system(
           block_movement
             .system()
             .label(Label::Movement)
-            .after(Label::Input),
+            .after(Label::Input)
+            .after(Label::Transpose),
         ),
     )
     .add_system(
@@ -151,17 +167,83 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
 }
 
 lazy_static! {
-  pub static ref BLOCKMAP: HashMap<u32, (Vec<Position>, usize)> = {
+  pub static ref BLOCKMAP: HashMap<u32, Vec<Position>> = {
     let mut m = HashMap::new();
-    m.insert(0, (vec![Position { x: 0, y: 0 }], 1)); // Block1つだけ
-    m.insert(1, (vec![Position { x: 0, y: 0 }, Position { x: 1, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }], 2)); // square
-    m.insert(2, (vec![Position { x: -1, y: 1 }, Position { x: 0, y: 1 }, Position { x: 0, y: 0 }, Position { x: 1, y: 0 }], 3)); // S字
-    m.insert(3, (vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }], 3)); // 逆S字
-    m.insert(4, (vec![Position { x: 1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }], 3)); // L字
-    m.insert(5, (vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }], 3)); // 逆L字
-    m.insert(6, (vec![Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }, Position { x: 0, y: 3 }], 4)); // I字
+    m.insert(1, vec![Position { x: 0, y: 0 }, Position { x: 1, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }]); // square
+    m.insert(2, vec![Position { x: -1, y: 1 }, Position { x: 0, y: 1 }, Position { x: 0, y: 0 }, Position { x: 1, y: 0 }]); // S字
+    m.insert(3, vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 1, y: 1 }]); // 逆S字
+    m.insert(4, vec![Position { x: 1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }]); // L字
+    m.insert(5, vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }]); // 逆L字
+    m.insert(6, vec![Position { x: -1, y: 0 }, Position { x: 0, y: 0 }, Position { x: 1, y: 0 }, Position { x: 0, y: 1 }]); // T字
+    m.insert(7, vec![Position { x: 0, y: 0 }, Position { x: 0, y: 1 }, Position { x: 0, y: 2 }, Position { x: 0, y: 3 }]); // I字
     m
   };
+
+  pub static ref TETORIMINO_ARRAY: Vec<Array2<u32>> = {
+    vec![
+      arr2(&[
+        [1,1],
+        [1,1],
+      ]), // square
+      arr2(&[
+        [1,1,0],
+        [0,1,1],
+        [0,0,0],
+      ]), // S字
+      arr2(&[
+        [0,1,1],
+        [1,1,0],
+        [0,0,0],
+      ]), // 逆S字
+      arr2(&[
+        [0,1,0],
+        [0,1,0],
+        [0,1,1],
+      ]), // L字
+      arr2(&[
+        [0,1,0],
+        [0,1,0],
+        [1,1,0],
+      ]), // 逆L字
+      arr2(&[
+        [0,1,0],
+        [1,1,1],
+        [0,0,0],
+      ]), // T字
+      arr2(&[
+        [0,1,0,0],
+        [0,1,0,0],
+        [0,1,0,0],
+        [0,1,0,0],
+      ]), // I字
+    ]
+  };
+}
+
+fn generate_tetorimino_positions(base_position: &Position, block: &Array2<u32>) -> Vec<Position> {
+  let mut res = vec![];
+
+  if let Some(s) = block.as_slice() {
+    let x_size = block.shape()[1];
+    let mut y_idx: usize = 0;
+    let mut x_idx: usize = 0;
+    for v in s.iter() {
+      if *v == 1 {
+        res.push(Position {
+          x: base_position.x + x_idx as i32,
+          y: base_position.y + y_idx as i32,
+        });
+      }
+
+      x_idx += 1;
+      if x_idx >= x_size {
+        x_idx = 0;
+        y_idx += 1;
+      }
+    }
+  }
+
+  res
 }
 
 fn spawn_block(
@@ -309,22 +391,37 @@ fn block_movement(
 
   if !collision_flag {
     if direction == Direction::Left {
-      for mut primitive_block_position in primitive_block_query.iter_mut() {
-        primitive_block_position.x -= 1;
-      }
+      let diff = Position { x: -1, y: 0 };
+      move_tetoriminos(primitive_block_query, &diff);
     } else if direction == Direction::Right {
-      for mut primitive_block_position in primitive_block_query.iter_mut() {
-        primitive_block_position.x += 1;
-      }
+      let diff = Position { x: 1, y: 0 };
+      move_tetoriminos(primitive_block_query, &diff);
     } else if direction == Direction::Down {
-      for mut primitive_block_position in primitive_block_query.iter_mut() {
-        primitive_block_position.y -= 1;
-      }
+      let diff = Position { x: 0, y: -1 };
+      move_tetoriminos(primitive_block_query, &diff);
     }
   }
 }
 
-fn block_transpose(active_block: Res<ActiveBlock>) {}
+// fn block_transpose(
+//   keyboard_input: Res<Input<KeyCode>>,
+//   mut active_block: ResMut<ActiveBlock>,
+//   mut primitive_block_query: Query<&mut Position, With<PrimitiveBlock>>,
+// ) {
+//   if keyboard_input.pressed(KeyCode::A) {
+//     active_block.theta += consts::FRAC_PI_4;
+//     for mut position in primitive_block_query.iter_mut() {
+//       position.x = (position.x as f64 * -active_block.theta.sin()) as i32;
+//       position.y = (position.y as f64 * active_block.theta.cos()) as i32;
+//     }
+//   } else if keyboard_input.pressed(KeyCode::D) {
+//     active_block.theta -= consts::FRAC_PI_4;
+//     for mut position in primitive_block_query.iter_mut() {
+//       position.x = position.x * active_block.theta.sin() as i32;
+//       position.y = position.y * -active_block.theta.cos() as i32;
+//     }
+//   }
+// }
 
 fn size_scaling(window: Res<MainWindow>, mut q: Query<(&Size, &mut Sprite)>) {
   for (sprite_size, mut sprite) in q.iter_mut() {
